@@ -1,2 +1,2 @@
 # java-blackjack-assignment
-A blackjack program, written in java, to be played through command line.
+A blackjack program, written in Java, to be played through command line.
