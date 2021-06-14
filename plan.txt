@@ -1,0 +1,166 @@
+Card class for each of the cards in a deck
+every card performs the same but the ace, which can have a value of 1 or 11
+set value to 1 and handle it specially
+attributes:
+	private String rank
+	private String suit
+	private int value
+functions:
+	public Card(String rank, String suit, int value)
+	public String getRank()
+	public void setRank(String newRank)
+	public String getSuit()
+	public void setSuit(String newSuit)
+	public int getValue()
+	public void setValue(int newValue)
+	public boolean isAce()
+	public String toString()
+	
+	
+	
+Deck class to hold all cards
+attributes:
+	private Stack<Card> cards
+functions:
+	public Deck()
+	public Deck(int totalNumOfDecks)
+	public Stack<Card> getCards()
+	public void setCards(Stack<Card> obj)
+	public void shuffle()
+	public Card drawCard()
+	public void addCard(Card c)
+	public void moveCardsFromDeck(Deck source)
+
+
+
+Game class used to create instance of Blackjack game
+attributes:
+	private int totalNumOfDecks
+	private int roundNum
+	private boolean allowBetting
+	private int startingAmount
+	private int minBet
+	private int maxBet
+	private int numChips
+	private Deck drawPile
+	private Deck discardPile
+functions:
+	public Game(int totalNumOfDecks, boolean allowBetting, int startingAmount, int minBet, int maxBet)
+	public void playGame()
+	private void playRound()
+	private int getBettingAmount(Scanner kbReader)
+	private int getPlayerInputAsInt(Scanner kbReader)
+	private void exitGame()
+	
+	
+	
+game display:
+
+=========================================
+Round 1
+
+How much will you bet? (Chips: 100)
+50
+
+You bet: 50
+Remaining chips: 50
+
+The dealer draws you a card: ace of spades (1 or 11)
+The dealer draws themself a card: six of clubs (6)
+The dealer draws you a card: seven of hearts (7)
+The dealer draws themself a card and places it facedown.
+
+Deck: 48 cards
+
+Your hand:
+	ace of spades (1 or 11)
+	seven of hearts (7)
+	Total: 8 or 18
+
+Dealer's hand:
+	six of clubs (6)
+	??? (?)
+	Total: 6 + ?
+
+What will you do?					// Availability:
+	[1]  Hit						// always
+	[2]  Stand						// always
+	[3]  Double down				// only if the player's numChips >= their bet or if betting is disabled
+	[4]  Split						// only if the player has two cards of identical value and if the player's numChips >= their original bet or if betting is disabled
+	[5]  Take insurance	bet			// only if the dealer's first card is an ace and the round has just begun and player has more than 0 money in their numChips
+	[6]  Deny insurance bet			// only if the dealer's first card is an ace and the round has just begun
+	[7]  Surrender					// only if the dealer's first card isn't an ace or if the round has not just begun
+	[0]  Exit game						// always
+	
+	
+	
+after dealing cards:
+1.  Check if dealer's faceup card is an ace; if so, only display if player's numChips > 0:
+	[1]  Take insurance bet
+	[2]  Deny insurance bet
+	[0]  Exit game
+	If player takes insurance bet,
+		Prompt them for bet amount (max bet: smaller number between original bet and numChips)
+	If dealer gets natural blackjack,
+		If player took insurance,
+			Player loses initial bet, gets payed 2:1 on insurance bet, breaks even, round ends
+		If player denied insurance,
+			Player loses initial bet, round ends
+	If dealer does not get natural blackjack,
+		If player took insurance,
+			Player loses insurance but keeps initial bet, round continues
+		If player denied insurance,
+			Round continues
+2.  Display always:
+	[1]  Hit
+	[2]  Stand
+3.  Display if betting is disabled or if the player's numChips >= their bet
+	[#]  Double down
+4.  Display if player has two cards of identical value and (if betting is disabled or if player's numChips >= their bet)
+	[#]  Split
+5.  Display always:
+	[#]  Surrender
+	[0]  Exit game
+	
+	
+
+how to deal with player input:
+1.  Function will be called that takes boolean parameter specifying whether to display only insurance or everything
+2.  Function will display options, each with its own number
+3.  Player input will be recorded and associated method will be run
+
+
+
+how to get the sum of the cards in a hand:
+Normally, you would sum the values of all the cards, but since an ace has two values, it is more complicated than that.
+Therefore, to handle aces:
+1.  Calculate sum as normal unless an ace is encountered
+2.  Upon encountering an ace, create a duplicate of the sum
+3.  Add 1 to the first sum, and add 11 to the second sum
+4.  If either sum or both sums are greater than 21 and num of sums > 1, remove the largest offending sum
+5.  After all cards have been processed, return the maximum sum
+
+
+
+Step by step playRound():
+1.  Print barrier of ='s and round number
+2a. If betting is enabled, prompt the user for a bet amount. After they
+	enter a valid amount, remove it from their wallet and display the bet
+2b. Otherwise, continue
+3.  Draw the player a card and log it; store the card in the player's hand
+4.  Draw the dealer a card and log it; store the card in the dealer's hand
+5.  Draw the player a card and log it; store the card in the player's hand
+6.  Draw the dealer a card and log it, but do not display what card it is; store the card in the dealer's hand
+7a. If the player has a blackjack, announce that they have a blackjack and 
+	reveal the dealer's other card. If the dealer also has a blackjack, push;
+	player receives their bet amount back and breaks even. If the dealer does not
+	have a blackjack, pay the user out their initial bet, and then 3:2 rounded up.
+7b. Otherwise, continue
+8a. If the dealer's first card is an ace, in addition to other prompts, include an
+	insurance bet. If the player accepts, they may bet from 1 chip up to half of their
+	original bet. If the dealer has a blackjack, the player loses their original bet and
+	receives 3 * their insurance bet. If the dealer does not have a blackjack and the
+	player placed an insurance bet, display that the dealer did not have a blackjack.
+8b. Otherwise, continue
+9.  Always display "hit" and "stand" as 1 and 2 respectively
+10. If the player chooses hit, disable insurance if it is not already disabled

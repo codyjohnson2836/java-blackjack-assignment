@@ -1,0 +1,42 @@
+menu display:
+
+Select an option by entering its number.
+	[1]  Start new game
+	[2]  Load saved game
+	[3]	 Delete saved game
+	[4]  Options
+	[0]  Exit
+	
+	
+	
+options display:
+
+Select an option by entering its number.
+	[1]  Number of decks to use					6
+	[2]  Allow betting 						 true
+	[3]  Starting amount				  	  100
+	[4]  Minimum bet						    2
+	[5]  Maximum bet					  	  500
+	[6]  Save settings
+	[7]  Restore defaults
+	[0]  Exit to menu
+	
+	
+	
+in main Blackjack class
+functions:
+	private void displayMenu()
+	private void displayOptions()
+	private void startNewGame()
+	private void loadSavedGame()
+	private void deleteSavedGame()
+	private void saveSettings()
+	private void restoreDefaults()
+	private void exitToMenu()
+	private void exitProgram()
+	
+	
+	
+blackjack features:
+	splitting
+	saving game
