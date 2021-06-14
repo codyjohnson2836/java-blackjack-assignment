@@ -160,8 +160,9 @@ public class Game
 
             // print options for player to choose from
             displayOptions(doubleDownKey, insuranceKey, surrenderKey);
-            // since surrenderKey was last one updated, it has the greatest value
-            int playerInput = getPlayerInputAsInt(0, surrenderKey);
+            // since keyCount corresponds to the value of the key for the next assigned option,
+            //   keyCount - 1 yields the key value for the most recently assigned option
+            int playerInput = getPlayerInputAsInt(0, keyCount - 1);
 
             System.out.format("============================%n");
 
