@@ -1,5 +1,7 @@
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+
 /* 
  * Hand class to represent the player's and dealer's set of drawn cards
  * Has methods for helping with blackjack such as:
@@ -8,11 +10,13 @@ import java.util.Collections;
  *   getSumOfCards - returns the int sum of the values of all Cards in the hand
  *   displayCards  - displays the Cards one after the other, indented
  */
-public class Hand 
+public class Hand implements Serializable
 {
     // Class variable
     // Holds List of Card objects
     private ArrayList<Card> cards;
+    // default serialVersion ID
+    private static final long serialVersionUID = 1L;
 
 
     // Constructor for empty hand

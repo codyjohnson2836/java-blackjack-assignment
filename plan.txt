@@ -144,23 +144,59 @@ Therefore, to handle aces:
 
 Step by step playRound():
 1.  Print barrier of ='s and round number
-2a. If betting is enabled, prompt the user for a bet amount. After they
-	enter a valid amount, remove it from their wallet and display the bet
-2b. Otherwise, continue
+2   If betting is enabled,
+		Prompt the user for a bet amount. After they enter
+		a valid amount, remove it from their temporary wallet and display the bet
 3.  Draw the player a card and log it; store the card in the player's hand
 4.  Draw the dealer a card and log it; store the card in the dealer's hand
 5.  Draw the player a card and log it; store the card in the player's hand
 6.  Draw the dealer a card and log it, but do not display what card it is; store the card in the dealer's hand
-7a. If the player has a blackjack, announce that they have a blackjack and 
-	reveal the dealer's other card. If the dealer also has a blackjack, push;
-	player receives their bet amount back and breaks even. If the dealer does not
-	have a blackjack, pay the user out their initial bet, and then 3:2 rounded up.
-7b. Otherwise, continue
-8a. If the dealer's first card is an ace, in addition to other prompts, include an
-	insurance bet. If the player accepts, they may bet from 1 chip up to half of their
-	original bet. If the dealer has a blackjack, the player loses their original bet and
-	receives 3 * their insurance bet. If the dealer does not have a blackjack and the
-	player placed an insurance bet, display that the dealer did not have a blackjack.
-8b. Otherwise, continue
+7.  If the player has a blackjack,
+		Announce that they have a blackjack and reveal the dealer's other card.
+		If the dealer also has a blackjack,
+			Announce push, no change to player's money, and start new round
+		Else,
+			Pay the user out their initial bet, then 3:2 rounded up, and start new round
+8.  If the dealer's first card is an ace and the player has at least half of their bet in chips,
+		Prompt for taking or denying insurance
+		If the player chooses insurance,
+			They bet half of their bet rounded down
+			If the dealer has a blackjack,
+				The player loses their original bet and receives 3 * their insurance bet, and start new round
+			Else
+				Display that the dealer did not have a blackjack, player loses insurance bet
+		Else
+			If the dealer has a blackjack,
+				The player loses their original bet as normal, and start new round
+			Else
+				Display that the dealer did not have a blackjack
 9.  Always display "hit" and "stand" as 1 and 2 respectively
 10. If the player chooses hit, disable insurance if it is not already disabled
+
+
+
+Different game states:
+about to bid -ignore
+choose or deny insurance -allow saving
+about to choose a normal option -allow saving
+after the round ends -allow saving
+
+
+
+Options:
+	Hit					-give player card, end turn
+	Stand				-end round
+	Double down			-give player card, end round
+	Surrender			-immediately end round
+	Take insurance		-end turn/end round
+	Deny insurance		-end turn/end round
+	Save game			-end turn
+	Exit to menu		-end game
+
+
+
+end round options:
+Select an option by entering its number:
+	[1]  Continue
+	[2]  Save game
+	[0]  Exit to menu

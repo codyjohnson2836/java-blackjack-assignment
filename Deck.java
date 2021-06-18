@@ -1,12 +1,15 @@
 import java.util.Stack;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Random;
+import java.io.Serializable;
+
 /*
  * Deck class for representing a stack of cards
  * Mixes multiple decks of cards together, 6 by default (defined through Blackjack.java file)
  * Cards are pulled off the top of the stack
  */
-public class Deck
+public class Deck implements Serializable
 {
     // Class variables
     // Stack of card objects
@@ -14,6 +17,9 @@ public class Deck
     // initial size of Deck
     // used to reset the deck when it is low on cards
     private int initialSize;
+    private Random rand;
+    // default serialVersion ID
+    private static final long serialVersionUID = 1L;
 
 
     // Constructor for empty Deck
@@ -22,6 +28,7 @@ public class Deck
     {
         cards = new Stack<Card>();
         initialSize = 0;
+        rand = new Random(System.currentTimeMillis());
     }
 
 
@@ -54,26 +61,47 @@ public class Deck
 
         // Set initial size for checking when the deck is low on cards
         initialSize = cards.size();
+        rand = new Random(System.currentTimeMillis());
     }
 
 
     // Card setters and getters
     public Stack<Card> getCards() {return cards;}
     public void setCards(Stack<Card> obj) {cards = obj;}
+    public int getInitialSize() {return initialSize;}
+    public void setInitialSize(int newInitialSize) {initialSize = newInitialSize;}
+    public Random getRand() {return rand;}
+    public void setRand(Random newRand) {rand = newRand;}
 
 
     // Shuffle the Card Stack
 	public void shuffle()
     {
-        Collections.shuffle(cards);
+        Collections.shuffle(cards, rand);
     }
 
 
-    // Insert cards from discard deck back into draw deck and shuffle
+    // set all cards to visible
+    public void setAllVisible()
+    {
+        for (Card c : cards)
+            c.setFacedown(false);
+    }
+
+
+    // Insert cards from discard deck back into draw deck, shuffle, and make them all visible
     public void resetDeck(Deck discardDeck)
     {
         transferCards(discardDeck);
         shuffle();
+        setAllVisible();
+    }
+
+
+    // return the number of cards in the deck
+    public int getSize()
+    {
+        return cards.size();
     }
 
 

@@ -1,262 +1,383 @@
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.Scanner;
+
 /*
  * Game class containing all methods for playing a game of blackjack
- * playGame begins the game
+ * runGame begins the game
  * constructor can be provided with custom values to change the game experience
  */
-public class Game
+public class Game implements Serializable
 {
     // class variables
-    private int minBet, maxBet, numChips;
+    private int minBet, maxBet, numChips, state, roundNum;
 	private boolean allowBetting;
 	private Deck drawDeck, discardDeck;
-    private Scanner kbReader;
+    private GameHelper gameHelper;
+    // default serialVersion ID
+    private static final long serialVersionUID = 1L;
 
 
     // constructor
     // can be sent custom values for different game experience
-    public Game(int totalNumOfDecks, boolean allowBetting, int startingAmount, int minBet, int maxBet)
+    public Game(int numOfDecks, boolean allowBetting, int startingAmount, int minBet, int maxBet)
     {
+        drawDeck = new Deck(numOfDecks);
+        drawDeck.shuffle();
+        discardDeck = new Deck();
+        this.allowBetting = allowBetting;
+        numChips = startingAmount;
         this.minBet = minBet;
         this.maxBet = maxBet;
-        numChips = startingAmount;
-
-        this.allowBetting = allowBetting;
-
-        drawDeck = new Deck(totalNumOfDecks);
-        discardDeck = new Deck();
-
-        kbReader = new Scanner(System.in);
+        roundNum = 1;
     }
 
 
     // run this method to start playing blackjack
-	public void playGame()
+	public void runGame(Scanner kbReader)
     {
-        int round = 1;
-        drawDeck.shuffle();
-        // run infinitely if betting is disabled, else until player runs out of chips
-        while (numChips >= minBet || allowBetting == false)
+        // run until game is manually exited by player or until the player runs out of chips
+        boolean loopRounds = true;
+        while (loopRounds == true && (numChips >= Math.max(minBet, 1) || allowBetting == false || state != 0))
         {
-            playRound(round);
-            round++;
+            // play the round out
+            loopRounds = playRound();
 
-            // player is out of chips; exit program
-            if (allowBetting == true && numChips < minBet)
+            // perform after-round management
+            roundNum++;
+            state = 0;
+            // move cards out of hands and into discard deck
+            discardDeck.transferCards(gameHelper.getPlayerHand());
+            discardDeck.transferCards(gameHelper.getDealerHand());
+
+            // player is out of chips; print goodbye message
+            if (allowBetting == true && numChips < minBet && loopRounds == true)
             {
                 System.out.println("Unfortunately, you've run out of chips. Please come again!");
-                System.out.print("Press enter to exit the program. ");
+                System.out.print("Press enter to return to the menu. ");
+                kbReader.nextLine();
+                System.out.println();
             }
-            // prompt user for input before moving on to next round to give them time to read
-            else
-                System.out.print("Press enter to continue to the next round. ");
-            // newline characters are cleared by the first nextLine()
-            // input is waited for by the second newLine()
-            kbReader.nextLine();
-            kbReader.nextLine();
+            // player has chips and game is still continuing
+            // display options, parse player input, and select the corresponding player option
+            else if (loopRounds == true)
+            {
+                boolean loopRoundOptions = true;
+                while (loopRoundOptions)
+                {
+                    displayEndRoundOptions();
+
+                    int playerInput = Menu.getPlayerInputAsInt(0, 2);
+
+                    if (playerInput == 0)
+                        loopRounds = false;
+
+                    loopRoundOptions = performEndRoundAction(playerInput);
+                }
+            }
+        }
+    }
+
+
+    // display options for after the round ends
+    private void displayEndRoundOptions()
+    {
+        System.out.println("Select an option by entering its number:");
+        System.out.println("    [1]  Continue");
+        System.out.println("    [2]  Save game");
+        System.out.println("    [0]  Exit to menu");
+    }
+
+
+    // perform an action based on the player's chosen option
+    // returns whether to keep looping the menu or not
+    private boolean performEndRoundAction(int playerChoice)
+    {
+        switch (playerChoice)
+        {
+            // if player is continuing, stop looping the after-round options
+            case 1:
+                return false;
+            case 2:
+                return saveGame(this);
+            default:
+                return exitToMenu();
         }
     }
 
 
     // plays a single round of blackjack
     // master method
-    // could use some tuning up
-	private void playRound(int round)
+    // returns whether to continue the game or not
+	private boolean playRound()
     {
-        System.out.format("==========================================%n" + "Round %d%n%n", round);
-        // get bet for current round if betting is enabled
-        int bettingAmount = 0;
-        if (allowBetting == true)
+        switch (state)
         {
-            bettingAmount = getBettingAmount(minBet, Math.min(maxBet, numChips));
-            numChips -= bettingAmount;
-            System.out.format("You bet: %d%n" + "Chips remaining: %d%n%n", bettingAmount, numChips);
+            // state set to 0 when player finishes a round
+            // if player then saves and loads, start next round
+            case 0:
+                // create GameHelper object to store useful variables
+                gameHelper = new GameHelper();
+                // set up the round by getting the bet and drawing cards
+                setUpRound();
+
+
+            // state set to 1 at beginning of this section
+            // if player then saves and loads, their betting amount has been saved
+            //   and already removed from their chips, and cards have already been dealt
+            case 1:
+                state = 1;
+
+                // display the player's hand
+                displayHand(gameHelper.getPlayerHand(), true);
+
+                // check if the player has a natural blackjack, and if so,
+                //   "return" to a new round after finishing up the current round
+                boolean hasNatural = checkForNatural();
+                if (hasNatural == true)
+                    return true;
+
+                // display dealer's hand
+                displayHand(gameHelper.getDealerHand(), false);
+
+
+                // section for taking and denying insurance
+                if (allowBetting == true && gameHelper.getDealerHand().getCardAtIndex(0).isAce() == true && numChips >= gameHelper.getBettingAmount() / 2)
+                {
+                    // display insurance options, prompt user for input, and perform insurance action based on user input
+                    // loop until the player chooses an option that is not saving the game
+                    int playerInput = 3;
+                    boolean continueRound = true;
+                    while (playerInput == 3)
+                    {
+                        // display options for player to choose from
+                        displayInsuranceOptions();
+
+                        // get player input
+                        playerInput = Menu.getPlayerInputAsInt(0, 3);
+
+                        // perform the action chosen by the player
+                        continueRound = performInsuranceAction(playerInput);
+
+                        // if player chose to save game, display hands again and loop
+                        if (playerInput == 3)
+                        {
+                            displayHand(gameHelper.getPlayerHand(), true);
+                            displayHand(gameHelper.getDealerHand(), false);
+                        }
+                    }
+
+                    // if exit to menu was chosen, end the game
+                    if (gameHelper.getEndGame() == true)
+                        return false;
+
+                    // if the dealer had a blackjack after all, move on to the next round
+                    if (continueRound == false)
+                        return true;
+                }
+
+
+            // state set to 2 at beginning of this section
+            // if player then saves and loads, their betting amount has been saved
+            //   and already removed from their chips, cards have already been dealt,
+            //   and insurance has already been dealt with
+            case 2:
+                // display hands if the player has just loaded in
+                if (state == 2)
+                {
+                    displayHand(gameHelper.getPlayerHand(), true);
+                    displayHand(gameHelper.getDealerHand(), false);
+                }
+
+                // loop the player's turn until they either end it, bust, or blackjack
+                state = 2;
+                int turnCount = 0;
+                boolean continueTurn = true;
+                boolean playerBust = false;
+                while (continueTurn == true)
+                {
+                    // stores the number that the user will press to select a given option
+                    int keyCount = 3;
+                    
+                    // double downs
+                    int doubleDownKey = getKey(keyCount, allowBetting == true && numChips >= gameHelper.getBettingAmount() && turnCount == 0);
+                    if (doubleDownKey != -1)
+                        keyCount++;
+
+                    // surrendering
+                    int surrenderKey = getKey(keyCount, gameHelper.getBettingAmount() > 1);
+                    if (surrenderKey != -1)
+                        keyCount++;
+
+                    // print options for player to choose from
+                    // keyCount will be equal to the key immediately after surrenderKey,
+                    //   which will be used to set the key for saving the game
+                    displayNormalOptions(doubleDownKey, surrenderKey, keyCount);
+
+                    // get player input
+                    int playerInput = Menu.getPlayerInputAsInt(0, keyCount);
+
+                    // perform action based on player input
+                    continueTurn = performNormalAction(playerInput, doubleDownKey, surrenderKey, keyCount);
+
+                    // if player surrendered, end round
+                    if (playerInput == surrenderKey)
+                        return true;
+
+                    // if player exited to menu, end game
+                    if (gameHelper.getEndGame() == true)
+                        return false;
+
+                    // show player hand
+                    displayHand(gameHelper.getPlayerHand(), true);
+
+                    // if player has blackjack, display it 
+                    if (gameHelper.getPlayerHand().hasBlackjack() == true)
+                        System.out.format("Blackjack!%n%n");
+                    // if player has bust, display it and end player turn
+                    else if (gameHelper.getPlayerHand().hasBust() == true)
+                    {
+                        System.out.format("Bust!%n%n");
+                        playerBust = true;
+                        continueTurn = false;
+                    }
+
+                    // show dealer hand
+                    displayHand(gameHelper.getDealerHand(), false);
+
+                    // disable insurance only if player has chosen something other than save game
+                    if (playerInput != keyCount)
+                        turnCount++;
+                }
+
+
+                // player's turn is over
+                // allow dealer to take their turn if player did not bust
+                // dealer draws until the total of their cards is greater than or equal to 17
+                if (playerBust == false)
+                {
+                    dealerTurn(gameHelper.getDealerHand());
+
+                    // if dealer has blackjack or bust, announce it
+                    if (gameHelper.getDealerHand().hasBlackjack() == true)
+                        System.out.format("Blackjack!%n%n");
+                    else if (gameHelper.getDealerHand().hasBust() == true)
+                        System.out.format("Bust!%n%n");
+                }
+
+                // calculate int defining who won (player = 1, dealer = -1, push = 0)
+                int bias = calculateWinnerBias(gameHelper.getPlayerHand(), gameHelper.getDealerHand());
+                // if betting is allowed, give the player chips if they won
+                if (allowBetting == true)
+                    winChips(bias, gameHelper.getBettingAmount());
+                // display the winner
+                displayWinner(bias);
         }
 
-        // create hands for player and dealer
-        Hand playerHand = new Hand();
-        Hand dealerHand = new Hand();
-        // deal them each two cards
-        // second of dealer's cards is hidden until the player finishes their turn
-        hit(playerHand, true, false);
-        hit(dealerHand, false, false);
-        hit(playerHand, true, false);
-        hit(dealerHand, false, true);
+        // start new round
+        return true;
+    }
 
-        //display number of cards in deck, reset deck if it is half empty
-        System.out.format("%nDeck: %d cards%n", drawDeck.getCards().size());
+
+    // get the player's betting amount and draw cards for both
+    private void setUpRound()
+    {
+        // display header
+        System.out.format("==========================================%n" + "Round %d%n%n", roundNum);
+
+        // get bet for current round if betting is enabled
+        if (allowBetting == true)
+        {
+            // get betting amount
+            // minimum will be whatever the minimum bet was set to when the Game object was created
+            // maximum will be the minimum value between the maximum bet set on Game creation and the number of chips the player has
+            gameHelper.setBettingAmount(getBettingAmount(minBet, Math.min(maxBet, numChips)));
+            numChips -= gameHelper.getBettingAmount();
+            System.out.format("You bet: %d%n" + "Chips remaining: %d%n%n", gameHelper.getBettingAmount(), numChips);
+        }
+
+        // deal player and dealer each two cards
+        // second of dealer's cards is hidden until the player finishes their turn
+        hit(gameHelper.getPlayerHand(), true, false);
+        hit(gameHelper.getDealerHand(), false, false);
+        hit(gameHelper.getPlayerHand(), true, false);
+        hit(gameHelper.getDealerHand(), false, true);
+
+        // display number of cards in deck, reset deck if it is half empty
+        System.out.format("%nDeck: %d cards%n", drawDeck.getSize());
         // returns true if current deck size < 0.5 * its initial size
         if (drawDeck.isLowOnCards() == true)
         {
+            System.out.format("Over half of deck used. Cards shuffled.%n%n");
             drawDeck.resetDeck(discardDeck);
-            System.out.format("Half of deck used; shuffling...%n%n");
         }
         else
             System.out.println();
+    }
 
-        // display the player's hand
-        displayHand(playerHand, true);
+
+    // check if the player has a natural blackjack and finish the round if so
+    // returns whether to end the round or not
+    private boolean checkForNatural()
+    {
         // if the player has a natural blackjack, announce it
-        if (playerHand.hasBlackjack() == true)
+        if (gameHelper.getPlayerHand().hasBlackjack() == true)
         {
             System.out.format("Blackjack!%n%n");
 
             // reveal dealer's second card
-            displayHand(dealerHand, false);
-            revealFacedownCard(dealerHand);
+            displayHand(gameHelper.getDealerHand(), false);
+            revealFacedownCard(gameHelper.getDealerHand());
 
             // if the dealer also has a blackjack, announce it
-            if (dealerHand.hasBlackjack() == true)
+            if (gameHelper.getDealerHand().hasBlackjack() == true)
                 System.out.format("%nBlackjack!%n%n");
 
             // player has blackjack, dealer doesn't; pay out 3:2
             else
                 if (allowBetting == true)
-                    numChips += (int)Math.ceil(bettingAmount * 2.5);
+                    numChips += (int)Math.ceil(gameHelper.getBettingAmount() * 2.5);
+                    
             // print winner message
-            int bias = calculateWinnerBias(playerHand, dealerHand);
-            printWinner(bias);
+            int bias = calculateWinnerBias(gameHelper.getPlayerHand(), gameHelper.getDealerHand());
+            displayWinner(bias);
 
-            // start new round
-            return;
+            return true;
         }
-
-        // display dealer's hand
-        displayHand(dealerHand, false);
-
-        // should player input continue to be handed?
-        boolean allowInput = true;
-        // should the dealer's turn be skipped after the player's?
-        boolean skipDealerTurn = false;
-        // is the player allowed to take insurance currently?
-        boolean canTakeInsurance;
-        // disable if betting is not allowed
-        if (allowBetting == true)
-            canTakeInsurance = true;
+        // the player does not have a natural blackjack
         else
-            canTakeInsurance = false;
-
-        // get player input
-        // dynamically change options that player can select according to the status of their hand
-        while (allowInput == true)
-        {
-            // stores the number that the user will press to select a given option
-            int keyCount = 3;
-            
-            // double downs
-            int doubleDownKey = getKey(keyCount, numChips >= bettingAmount || allowBetting == false);
-            if (doubleDownKey != -1)
-                keyCount++;
-
-            // taking insurance
-            int insuranceKey = getKey(keyCount, canTakeInsurance == true && dealerHand.getCardAtIndex(0).isAce() == true);
-            if (insuranceKey != -1)
-                keyCount++;
-
-            // surrendering
-            int surrenderKey = getKey(keyCount, insuranceKey == -1);
-            if (surrenderKey != -1)
-                keyCount++;
-
-            // print options for player to choose from
-            displayOptions(doubleDownKey, insuranceKey, surrenderKey);
-            // since keyCount corresponds to the value of the key for the next assigned option,
-            //   keyCount - 1 yields the key value for the most recently assigned option
-            int playerInput = getPlayerInputAsInt(0, keyCount - 1);
-
-            System.out.format("============================%n");
-
-            // if player bets correctly on dealer getting blackjack,
-            //   skip rest of commands and print special insurance info
-            // otherwise, continue as normal
-            boolean continueRoundAfterInsurance = true;
-
-            // perform action based on which input player chose
-            switch (playerInput)
-            {
-                // hit
-                case 1:
-                    hit(playerHand, true, false);
-                    System.out.println();
-                    break;
-                // stand
-                case 2:
-                    allowInput = false;
-                    break;
-                // exit game
-                case 0:
-                    exitGame();
-                    break;
-                // non-constant values; compare with if-else
-                default:
-                    // double down
-                    if (playerInput == doubleDownKey)
-                    {
-                        if (allowBetting == true)
-                            bettingAmount = doubleDown(playerHand, bettingAmount);
-                        else
-                            hit(playerHand, true, false);
-                        allowInput = false;
-                        System.out.println();
-                    }
-                    // take insurance
-                    else if (playerInput == insuranceKey)
-                        continueRoundAfterInsurance = takeInsurance(bettingAmount, dealerHand);
-                    // surrender
-                    else if (playerInput == surrenderKey)
-                    {
-                        System.out.format("Hand surrendered, partial bet returned%n%n");
-                        if (allowBetting == true)
-                            numChips += (int)Math.ceil(bettingAmount / 2.0);
-                        return;
-                    }
-            }
-            // end early since player guessed right on insurance
-            if (continueRoundAfterInsurance == false)
-            {
-                displayHand(dealerHand, false);
-                System.out.format("Blackjack!%n%n");
-                System.out.format("Result: Bet lost, insurance paid out%n%n");
-                return;
-            }
-
-            // show player hand
-            displayHand(playerHand, true);
-            // disable insurance since player has made their first input by now
-            canTakeInsurance = false;
-
-            // if player has bust or blackjack, announce it
-            if (playerHand.hasBust())
-            {
-                allowInput = false;
-                skipDealerTurn = true;
-                System.out.format("Bust!%n%n");
-            }
-            else if (playerHand.hasBlackjack())
-                System.out.format("Blackjack!%n%n");
-            // display dealer's hand
-            displayHand(dealerHand, false);
-        }
-        // exited player's input loop
-
-        // skip dealer's turn if true (used if player busts)
-        // otherwise, play dealer's turn out like normal
-        if (skipDealerTurn == false)
-        {
-            dealerTurn(dealerHand);
-
-            if (dealerHand.hasBlackjack())
-                System.out.format("Blackjack!%n%n");
-            else if (dealerHand.hasBust())
-                System.out.format("Bust!%n%n");
-        }
-
-        // display round result message and start new round
-        int bias = calculateWinnerBias(playerHand, dealerHand);
-        winChips(bias, bettingAmount);
-        printWinner(bias);
+            return false;
     }
 
+
+    // display options for when player must choose insurance options
+    private void displayInsuranceOptions()
+    {
+        System.out.println("What will you do?");
+        System.out.println("    [1]  Take insurance");
+        System.out.println("    [2]  Deny insurance");
+        System.out.println("    [3]  Save game");
+        System.out.println("    [0]  Exit to menu");
+    }
+
+
+    // performs an insurance option based on the input the player provided
+    private boolean performInsuranceAction(int playerChoice)
+    {
+        switch (playerChoice)
+        {
+            case 1:
+                return takeInsurance();
+            case 2:
+                return denyInsurance();
+            case 3:
+                return saveGame(this);
+            default:
+                return exitToMenu();
+        }
+    }
 
 
     // prompt user for int betting amount
@@ -265,38 +386,9 @@ public class Game
     {
         System.out.format("How much will you bet? (Chips: %d)%n", numChips);
 
-        int bettingAmount = getPlayerInputAsInt(min, max);
+        int bettingAmount = Menu.getPlayerInputAsInt(min, max);
 
         return bettingAmount;
-    }
-
-
-    // prompt user for int input
-    // loop until valid input is received
-    // must provide minimum and maximum values
-    private int getPlayerInputAsInt(int min, int max)
-    {
-        int playerInput;
-
-        while (true)
-        {
-            try
-            {
-                playerInput = Integer.parseInt(kbReader.next());
-                
-                if (playerInput >= min && playerInput <= max)
-                {
-                    System.out.format("%n");
-                    return playerInput;
-                }
-                else
-                    System.out.format("Invalid input. Number must be an integer between %d and %d, inclusive.%n", min, max);
-            }
-            catch (NumberFormatException exception)
-            {
-                System.out.format("Invalid input. Number must be an integer between %d and %d, inclusive.%n", min, max);
-            }
-        }
     }
 
 
@@ -374,8 +466,8 @@ public class Game
     }
 
 
-    // print winner message based on winner int
-    private void printWinner(int winnerBias)
+    // display winner message based on winner int
+    private void displayWinner(int winnerBias)
     {
         String result;
 
@@ -391,42 +483,78 @@ public class Game
                 break;
             // push
             default:
-                result = "Push, no winner";
+                result = "Push! No winner.";
         }
 
         System.out.format("Result: %s%n%n", result);
     }
 
 
-    // get dynamic number key on keyboard that will be pressed for a given option
-    // return the key to be pressed only if the option's condition evaluates to true
-    private int getKey(int keyCount, boolean condition)
-    {
-        if (condition == true)
-            return keyCount;
-        else
-            return -1;
-    }
-
-
     // display the options provided to the player as they play
-    private void displayOptions(int doubleDownKey, int insuranceKey, int surrenderKey)
+    private void displayNormalOptions(int doubleDownKey, int surrenderKey, int saveGameKey)
     {
         // hit/stand always available
         System.out.format("What will you do?%n");
         System.out.println("    [1]  Hit");
         System.out.println("    [2]  Stand");
 
-        // double down, insurance, surrender are situational
+        // double down and surrender are situational
         if (doubleDownKey != -1)
             System.out.format("    [%d]  Double down%n", doubleDownKey);
-        if (insuranceKey != -1)
-            System.out.format("    [%d]  Take insurance%n", insuranceKey);
         if (surrenderKey != -1)
             System.out.format("    [%d]  Surrender%n", surrenderKey);
 
-        // exit game is always available
-        System.out.println("    [0]  Exit game");
+        // save game and exit to menu are always available
+        System.out.format("    [%d]  Save game%n", saveGameKey);
+        System.out.println("    [0]  Exit to menu");
+    }
+
+
+    // perform an action for a normal player turn based on which options are available and which key the player entered
+    // returns whether to continue getting input or not
+    private boolean performNormalAction(int playerChoice, int doubleDownKey, int surrenderKey, int saveGameKey)
+    {
+        switch (playerChoice)
+        {
+            // player chose hit
+            case 1:
+                boolean contAfterHit = hit(gameHelper.getPlayerHand(), true, false);
+                System.out.println();
+                return contAfterHit;
+
+            // player chose stand
+            case 2:
+                return stand();
+
+            // player chose exit to menu
+            case 0:
+                return exitToMenu();
+
+            // non-constant values, use if-else to choose between them
+            default:
+                // player chose double down
+                if (playerChoice == doubleDownKey)
+                {
+                    boolean contAfterDoubleDown = doubleDown(gameHelper.getPlayerHand());
+                    System.out.println();
+                    return contAfterDoubleDown;
+                }
+
+                // player chose surrender
+                else if (playerChoice == surrenderKey)
+                {
+                    return surrender(gameHelper.getBettingAmount());
+                }
+
+                // player chose save game
+                else if (playerChoice == saveGameKey)
+                {
+                    return saveGame(this);
+                }
+        }
+
+        // necessary for compliling program, but should never be accessible
+        return true;
     }
 
 
@@ -455,6 +583,17 @@ public class Game
     }
 
 
+    // get dynamic number key on keyboard that will be pressed for a given option
+    // return the key to be pressed only if the option's condition evaluates to true
+    private int getKey(int keyCount, boolean condition)
+    {
+        if (condition == true)
+            return keyCount;
+        else
+            return -1;
+    }
+
+
     // function to perform hit for player or dealer as necessary
     // adds card to hand and logs it, unless it is facedown
     // returns true so player input is still accepted
@@ -470,37 +609,96 @@ public class Game
     }
 
 
-    // function to perform double down for player
-    // double the bet, end player's input after they hit
-    // returns new amount of bet
-    private int doubleDown(Hand playerHand, int bettingAmount)
-    {
-        numChips -= bettingAmount;
-        bettingAmount *= 2;
-        System.out.format("New bet: %d" + "%nChips remaining: %d%n%n", bettingAmount, numChips);
-        
-        hit(playerHand, true, false);
 
-        return bettingAmount;
+    // cancel player input and continue on to the dealer's turn
+    private boolean stand()
+    {
+        return false;
     }
 
 
-    // function to perform insurance bet for player
-    // if the player bets successfully, they lose their bet but receive their insurance 2:1
-    // if player bets unsuccessfully, they keep their original bigger bet but lose their insurance bet
-    // returns true to continue round if dealer doesn't have blackjack
-    // returns false to end round early if dealer has a blackjack
-    private boolean takeInsurance(int originalBet, Hand dealerHand)
+    // double bet, hit once, and then stand
+    private boolean doubleDown(Hand playerHand)
     {
-        int insuranceAmount = getBettingAmount(1, (int)Math.ceil(originalBet / 2.0));
-        numChips -= insuranceAmount;
-        System.out.format("You bet: %d%n" + "Chips remaining: %d%n%n", insuranceAmount, numChips);
+        numChips -= gameHelper.getBettingAmount();
+        gameHelper.setBettingAmount(gameHelper.getBettingAmount() * 2);
+        System.out.format("New bet: %d" + "%nChips remaining: %d%n%n", gameHelper.getBettingAmount(), numChips);
         
-        if (dealerHand.hasBlackjack() == true)
+        hit(playerHand, true, false);
+        return stand();
+    }
+
+
+    // surrender, return half of player's chips rounded up
+    // is treated specially in playRound method
+    // returns false so player input is no longer accepted
+    private boolean surrender(int betAmount)
+    {
+        System.out.format("Result: Surrendered. Half of bet chips returned.%n%n");
+        numChips += Math.ceil(betAmount / 2.0);
+        return false;
+    }
+
+
+    // Saves user's game to a file called "blackjackGameSave.dat" in the current working directory
+    // Prints error to user if unsuccessful
+    // returns true so player input is still accepted
+    public boolean saveGame(Object gameObject)
+    {
+        try
         {
-            numChips += 3 * insuranceAmount;
+            // filePath for saving the file
+            String filePath = System.getProperty("user.dir") + File.separator + "blackjackGameSave.dat";
+            FileOutputStream fileOut = new FileOutputStream(filePath);
+            ObjectOutputStream objectOut = new ObjectOutputStream(fileOut);
+            objectOut.writeObject(gameObject);
+            objectOut.close();
+            fileOut.close();
+            // write success to user
+            System.out.format("Game successfully saved to file: %s%n%n", filePath);
+        }
+        // if unsuccessful, print error to user
+        catch (Exception ex)
+        {
+            System.out.format("Save unsuccessful. Perhaps the application does not have permission?%n%n");
+            //ex.printStackTrace();
+        }
+
+        return true;
+    }
+
+
+    // exit to the menu by ending the game without displaying anything until arriving at the menu
+    // returns false so player input is no longer accepted
+    private boolean exitToMenu()
+    {
+        gameHelper.setEndGame(true);
+        return false;
+    }
+
+
+    // is run if the player takes insurance
+    // player immediately bets half of their chips rounded down
+    // chips are lost if no blackjack, but received 2:1 if there is a blackjack
+    // returns true if the dealer does not have a blackjack to continue accepting player input
+    // returns false if the dealer has a blackjack to stop accepting player input
+    private boolean takeInsurance()
+    {
+        // remove insurance from chips
+        int insuranceBet = gameHelper.getBettingAmount() / 2;
+        numChips -= insuranceBet;
+        System.out.format("Insurance bet: %d" + "%nChips remaining: %d%n%n", insuranceBet, numChips);
+
+        // dealer has blackjack, pay out player
+        if (gameHelper.getDealerHand().hasBlackjack() == true)
+        {
+            revealFacedownCard(gameHelper.getDealerHand());
+            numChips += 3 * insuranceBet;
+            System.out.format("Blackjack!%n%n");
+            System.out.format("Result: Bet lost. Insurance paid out.%n%n");
             return false;
         }
+        // dealer does not have blackjack, player loses insurance permanently, round continues
         else
         {
             System.out.format("The dealer does not have a blackjack.%n%n");
@@ -509,11 +707,25 @@ public class Game
     }
 
 
-    // function to exit the game
-    // is always available (except when placing bets)
-	private void exitGame()
+    // is run if the player denies insurance
+    // announce if no blackjack, end round if blackjack
+    // returns true if the dealer does not have a blackjack to continue accepting player input
+    // returns false if the dealer has a blackjack to stop accepting player input
+    private boolean denyInsurance()
     {
-        System.out.format("Thanks for playing!%n");
-        System.exit(0);
+        // dealer has blackjack, end round
+        if (gameHelper.getDealerHand().hasBlackjack() == true)
+        {
+            revealFacedownCard(gameHelper.getDealerHand());
+            System.out.format("Blackjack!%n%n");
+            System.out.format("Result: Bet lost. Insurance paid out.%n%n");
+            return false;
+        }
+        // dealer does not have blackjack, continue round
+        else
+        {
+            System.out.format("The dealer does not have a blackjack.%n%n");
+            return true;
+        }
     }
 }

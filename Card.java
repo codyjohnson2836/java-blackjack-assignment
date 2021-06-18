@@ -1,15 +1,19 @@
+import java.io.Serializable;
+
 /*
  * Card class for representing playing cards
  * Stores rank, suit, and value as variables, as well as whether the card's variables
  *   are visible (facedown = false) or not (facedown = true)
  */
-public class Card
+public class Card implements Serializable
 {
     // Class variables
     private String rank, suit;
     private int value;
     // Indicates whether card's attributes are "visible" to player
     private boolean facedown;
+    // default serialVersion ID
+    private static final long serialVersionUID = 1L;
 
 
     // Constructor
